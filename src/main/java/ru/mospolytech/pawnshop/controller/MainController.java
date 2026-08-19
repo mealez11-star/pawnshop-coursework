@@ -797,6 +797,7 @@ public class MainController {
             LocalDate to = ValidationUtils.parseDate(panel.getToField().getText(), "Дата окончания");
             if (to.isBefore(from)) throw new IllegalArgumentException("Конец периода раньше начала");
             List<FinancialReportRow> rows = reportDao.findForPeriod(from, to);
+            SalesReportSummary salesSummary = reportDao.findSalesSummaryForPeriod(from, to);
             panel.getTableModel().setRowCount(0);
             BigDecimal totalLoans = BigDecimal.ZERO;
             BigDecimal totalCommission = BigDecimal.ZERO;
@@ -807,7 +808,13 @@ public class MainController {
                 totalLoans = totalLoans.add(row.getLoanAmount());
                 totalCommission = totalCommission.add(row.getCommissionAmount());
             }
-            panel.setReportSummary(rows.size(), totalLoans, totalCommission);
+            panel.setReportSummary(
+                    rows.size(),
+                    totalLoans,
+                    totalCommission,
+                    salesSummary.getSaleCount(),
+                    salesSummary.getRevenue()
+            );
         } catch (IllegalArgumentException e) {
             ViewUtils.showError(view, e.getMessage());
         } catch (SQLException e) {

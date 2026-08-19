@@ -2,6 +2,7 @@ package ru.mospolytech.pawnshop.dao;
 
 import ru.mospolytech.pawnshop.config.DatabaseConnection;
 import ru.mospolytech.pawnshop.model.FinancialReportRow;
+import ru.mospolytech.pawnshop.model.SalesReportSummary;
 
 import java.sql.Date;
 import java.sql.PreparedStatement;
@@ -47,5 +48,25 @@ public class ReportDao {
             }
         }
         return rows;
+    }
+
+    /** Количество продаж и выручка по датам продаж за тот же период отчёта. */
+    public SalesReportSummary findSalesSummaryForPeriod(LocalDate from, LocalDate to)
+            throws SQLException {
+        String sql = "SELECT COUNT(*) AS sale_count, COALESCE(SUM(p.value), 0) AS revenue "
+                + "FROM sales s "
+                + "JOIN prices p ON p.id_price = s.id_price AND p.id_item = s.id_item "
+                + "WHERE s.sale_date BETWEEN ? AND ?";
+        try (PreparedStatement statement = database.getConnection().prepareStatement(sql)) {
+            statement.setDate(1, Date.valueOf(from));
+            statement.setDate(2, Date.valueOf(to));
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return new SalesReportSummary(
+                        result.getInt("sale_count"),
+                        result.getBigDecimal("revenue")
+                );
+            }
+        }
     }
 }

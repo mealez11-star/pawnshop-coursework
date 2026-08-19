@@ -14,9 +14,11 @@ public class ReportPanel extends JPanel {
     private final JTextField fromField = new JTextField(LocalDate.now().withDayOfMonth(1).toString(), 10);
     private final JTextField toField = new JTextField(LocalDate.now().toString(), 10);
     private final JButton buildButton = new JButton("Построить отчёт");
-    private final JLabel resultLabel = new JLabel("Укажите период и постройте отчёт");
+    private final JLabel contractCountLabel = new JLabel("Договоров: 0");
     private final JLabel totalLoansLabel = new JLabel("Выдано: 0,00 ₽");
-    private final JLabel totalCommissionLabel = new JLabel("Комиссия: 0,00 ₽");
+    private final JLabel totalCommissionLabel = new JLabel("Начисленная комиссия: 0,00 ₽");
+    private final JLabel salesCountLabel = new JLabel("Продано товаров: 0");
+    private final JLabel salesRevenueLabel = new JLabel("Выручка от продаж: 0,00 ₽");
     private final DefaultTableModel tableModel;
 
     public ReportPanel() {
@@ -34,16 +36,24 @@ public class ReportPanel extends JPanel {
         filters.add(buildButton);
         top.add(filters, BorderLayout.NORTH);
 
-        JPanel summary = new JPanel(new FlowLayout(FlowLayout.LEFT, 18, 2));
-        resultLabel.setFont(resultLabel.getFont().deriveFont(Font.BOLD));
-        summary.add(resultLabel);
-        summary.add(totalLoansLabel);
-        summary.add(totalCommissionLabel);
+        JPanel summary = new JPanel(new GridLayout(1, 2, 10, 0));
+        summary.add(createSummaryBlock(
+                "Договоры за период",
+                contractCountLabel,
+                totalLoansLabel,
+                totalCommissionLabel
+        ));
+        summary.add(createSummaryBlock(
+                "Продажи за период",
+                salesCountLabel,
+                salesRevenueLabel
+        ));
         top.add(summary, BorderLayout.SOUTH);
         add(top, BorderLayout.NORTH);
 
         tableModel = new DefaultTableModel(new String[]{
-                "ID договора", "Клиент", "Дата", "Срок", "Выдано", "Комиссия", "Оценка залога", "Товаров"
+                "ID договора", "Клиент", "Дата", "Срок", "Выдано",
+                "Комиссия", "Оценка залога", "Товаров"
         }, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -70,13 +80,24 @@ public class ReportPanel extends JPanel {
         add(new JScrollPane(table), BorderLayout.CENTER);
     }
 
+    private JPanel createSummaryBlock(String title, JLabel... labels) {
+        JPanel block = new JPanel(new GridLayout(labels.length, 1, 0, 3));
+        block.setBorder(BorderFactory.createTitledBorder(title));
+        for (JLabel label : labels) {
+            block.add(label);
+        }
+        return block;
+    }
+
     public void setReportSummary(int rowCount, BigDecimal totalLoans,
-                                 BigDecimal totalCommission) {
-        resultLabel.setText(rowCount == 0
-                ? "За выбранный период договоров нет"
-                : "Найдено договоров: " + rowCount);
+                                 BigDecimal totalCommission, int saleCount,
+                                 BigDecimal salesRevenue) {
+        contractCountLabel.setText("Договоров: " + rowCount);
         totalLoansLabel.setText("Выдано: " + formatMoney(totalLoans));
-        totalCommissionLabel.setText("Комиссия: " + formatMoney(totalCommission));
+        totalCommissionLabel.setText(
+                "Начисленная комиссия: " + formatMoney(totalCommission));
+        salesCountLabel.setText("Продано товаров: " + saleCount);
+        salesRevenueLabel.setText("Выручка от продаж: " + formatMoney(salesRevenue));
     }
 
     private String formatMoney(BigDecimal value) {
