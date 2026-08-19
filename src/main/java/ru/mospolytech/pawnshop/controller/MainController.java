@@ -444,14 +444,21 @@ public class MainController {
 
             dialog.getAddItemButton().addActionListener(event -> {
                 try {
-                    Item item = (Item) dialog.getItemCombo().getSelectedItem();
-                    if (item == null) {
-                        throw new IllegalArgumentException("Нет свободного или возвращённого товара");
-                    }
                     BigDecimal assessed = ValidationUtils.parsePositiveMoney(
                             dialog.getAssessedValueField().getText(), "Оценочная стоимость", false);
-                    contractDao.addItem(contractId, item.getId(), assessed);
-                    dialog.getAssessedValueField().setText("");
+                    if (dialog.isNewItemMode()) {
+                        String itemName = ValidationUtils.requireText(
+                                dialog.getNewItemName(), "Название товара");
+                        contractDao.createAndAddNewItem(contractId, itemName, assessed);
+                    } else {
+                        Item item = (Item) dialog.getItemCombo().getSelectedItem();
+                        if (item == null) {
+                            throw new IllegalArgumentException(
+                                    "Нет возвращённого товара для повторного залога");
+                        }
+                        contractDao.addItem(contractId, item.getId(), assessed);
+                    }
+                    dialog.clearItemInput();
                     refresh.run();
                 } catch (IllegalArgumentException e) {
                     ViewUtils.showError(dialog, e.getMessage());
@@ -800,8 +807,7 @@ public class MainController {
                 totalLoans = totalLoans.add(row.getLoanAmount());
                 totalCommission = totalCommission.add(row.getCommissionAmount());
             }
-            panel.getTotalLoansLabel().setText("Выдано: " + totalLoans);
-            panel.getTotalCommissionLabel().setText("Комиссия: " + totalCommission);
+            panel.setReportSummary(rows.size(), totalLoans, totalCommission);
         } catch (IllegalArgumentException e) {
             ViewUtils.showError(view, e.getMessage());
         } catch (SQLException e) {

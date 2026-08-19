@@ -158,6 +158,46 @@ public class ContractDao {
         }
     }
 
+    /** Новый товар создаётся и добавляется в договор одной транзакцией. */
+    public void createAndAddNewItem(int contractId, String itemName,
+                                    BigDecimal assessedValue) throws SQLException {
+        Connection connection = database.getConnection();
+        boolean previousAutoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
+        try {
+            ensureContractEditable(connection, contractId);
+
+            int itemId;
+            String itemSql = "INSERT INTO items(name, current_status) VALUES (?, 'PLEDGED')";
+            try (PreparedStatement statement = connection.prepareStatement(
+                    itemSql, Statement.RETURN_GENERATED_KEYS)) {
+                statement.setString(1, itemName);
+                statement.executeUpdate();
+                try (ResultSet keys = statement.getGeneratedKeys()) {
+                    if (!keys.next()) {
+                        throw new SQLException("СУБД не вернула идентификатор товара");
+                    }
+                    itemId = keys.getInt(1);
+                }
+            }
+
+            String contractItemSql = "INSERT INTO contract_items"
+                    + "(id_contract, id_item, assessed_value) VALUES (?, ?, ?)";
+            try (PreparedStatement statement = connection.prepareStatement(contractItemSql)) {
+                statement.setInt(1, contractId);
+                statement.setInt(2, itemId);
+                statement.setBigDecimal(3, assessedValue);
+                statement.executeUpdate();
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(previousAutoCommit);
+        }
+    }
+
     public void removeItem(int contractId, int itemId) throws SQLException {
         Connection connection = database.getConnection();
         boolean previousAutoCommit = connection.getAutoCommit();

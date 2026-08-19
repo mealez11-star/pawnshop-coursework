@@ -16,9 +16,17 @@ public class ReportDao {
 
     /** Параметрический запрос финансового отчёта за период. */
     public List<FinancialReportRow> findForPeriod(LocalDate from, LocalDate to) throws SQLException {
-        String sql = "SELECT id_contract, client_name, issue_date, return_due_date, loan_amount, "
-                + "commission_amount, total_assessed_value, item_count "
-                + "FROM financial_report WHERE issue_date BETWEEN ? AND ? ORDER BY issue_date";
+        String sql = "SELECT c.id_contract, cl.full_name AS client_name, c.issue_date, "
+                + "c.return_due_date, c.loan_amount, c.commission_amount, "
+                + "COALESCE(SUM(ci.assessed_value), 0) AS total_assessed_value, "
+                + "COUNT(ci.id_item) AS item_count "
+                + "FROM contracts c "
+                + "JOIN clients cl ON cl.id_client = c.id_client "
+                + "LEFT JOIN contract_items ci ON ci.id_contract = c.id_contract "
+                + "WHERE c.issue_date BETWEEN ? AND ? "
+                + "GROUP BY c.id_contract, cl.full_name, c.issue_date, c.return_due_date, "
+                + "c.loan_amount, c.commission_amount "
+                + "ORDER BY c.issue_date, c.id_contract";
         List<FinancialReportRow> rows = new ArrayList<>();
         try (PreparedStatement statement = database.getConnection().prepareStatement(sql)) {
             statement.setDate(1, Date.valueOf(from));

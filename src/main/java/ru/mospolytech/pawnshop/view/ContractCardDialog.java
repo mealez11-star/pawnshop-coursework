@@ -18,6 +18,8 @@ import java.util.Locale;
 
 public class ContractCardDialog extends JDialog {
     private static final long serialVersionUID = 1L;
+    private static final String NEW_ITEM_MODE = "Новый товар";
+    private static final String REPEAT_PLEDGE_MODE = "Повторный залог";
 
     private final JComboBox<Client> clientCombo = new JComboBox<>();
     private final JTextField issueDateField = new JTextField(18);
@@ -30,9 +32,13 @@ public class ContractCardDialog extends JDialog {
 
     private final DefaultTableModel itemsTableModel;
     private final JTable itemsTable;
+    private final JComboBox<String> itemModeCombo = new JComboBox<>(
+            new String[]{NEW_ITEM_MODE, REPEAT_PLEDGE_MODE});
+    private final JTextField newItemNameField = new JTextField(24);
     private final JComboBox<Item> itemCombo = new JComboBox<>();
+    private final JPanel itemSelectorPanel = new JPanel(new CardLayout());
     private final JTextField assessedValueField = new JTextField(12);
-    private final JButton addItemButton = new JButton("Добавить товар");
+    private final JButton addItemButton = new JButton("Добавить в договор");
     private final JButton updateItemButton = new JButton("Изменить оценку");
     private final JButton removeItemButton = new JButton("Убрать товар");
     private final JLabel itemCountLabel = new JLabel("Количество товаров: 0");
@@ -148,14 +154,19 @@ public class ContractCardDialog extends JDialog {
         bottom.add(totals, BorderLayout.NORTH);
 
         if (editable) {
-            JPanel input = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            input.setBorder(BorderFactory.createTitledBorder("Товар договора"));
-            itemCombo.setPreferredSize(new Dimension(280, itemCombo.getPreferredSize().height));
+            JPanel input = new JPanel(new GridBagLayout());
+            input.setBorder(BorderFactory.createTitledBorder("Добавление товара"));
+
+            itemSelectorPanel.add(newItemNameField, NEW_ITEM_MODE);
+            itemSelectorPanel.add(itemCombo, REPEAT_PLEDGE_MODE);
+            itemModeCombo.addActionListener(event -> showSelectedItemInput());
+
+            newItemNameField.setToolTipText("Например: Ноутбук Lenovo IdeaPad");
+            itemCombo.setPreferredSize(new Dimension(300, itemCombo.getPreferredSize().height));
             assessedValueField.setToolTipText("Положительное число, например 30000");
-            input.add(new JLabel("Товар:"));
-            input.add(itemCombo);
-            input.add(new JLabel("Оценочная стоимость:"));
-            input.add(assessedValueField);
+            addFormRow(input, 0, "Способ:", itemModeCombo);
+            addFormRow(input, 1, "Товар:", itemSelectorPanel);
+            addFormRow(input, 2, "Оценочная стоимость:", assessedValueField);
             bottom.add(input, BorderLayout.CENTER);
 
             JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -165,6 +176,8 @@ public class ContractCardDialog extends JDialog {
             buttons.add(updateItemButton);
             buttons.add(removeItemButton);
             bottom.add(buttons, BorderLayout.SOUTH);
+
+            showSelectedItemInput();
         }
 
         tab.add(bottom, BorderLayout.SOUTH);
@@ -252,6 +265,25 @@ public class ContractCardDialog extends JDialog {
 
     public void selectItemsTab() {
         tabs.setSelectedIndex(1);
+    }
+
+    private void showSelectedItemInput() {
+        String mode = (String) itemModeCombo.getSelectedItem();
+        CardLayout layout = (CardLayout) itemSelectorPanel.getLayout();
+        layout.show(itemSelectorPanel, mode == null ? NEW_ITEM_MODE : mode);
+    }
+
+    public boolean isNewItemMode() {
+        return NEW_ITEM_MODE.equals(itemModeCombo.getSelectedItem());
+    }
+
+    public String getNewItemName() {
+        return newItemNameField.getText();
+    }
+
+    public void clearItemInput() {
+        newItemNameField.setText("");
+        assessedValueField.setText("");
     }
 
     private static String formatMoney(BigDecimal value) {
