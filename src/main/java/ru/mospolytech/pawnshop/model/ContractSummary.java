@@ -12,10 +12,13 @@ public class ContractSummary {
     private final LocalDate returnDueDate;
     private final BigDecimal commissionAmount;
     private final BigDecimal loanAmount;
+    private final BigDecimal totalAssessedValue;
+    private final int itemCount;
 
     public ContractSummary(int contractId, int clientId, String clientName,
                            LocalDate issueDate, LocalDate returnDueDate,
-                           BigDecimal commissionAmount, BigDecimal loanAmount) {
+                           BigDecimal commissionAmount, BigDecimal loanAmount,
+                           BigDecimal totalAssessedValue, int itemCount) {
         this.contractId = contractId;
         this.clientId = clientId;
         this.clientName = clientName;
@@ -23,6 +26,8 @@ public class ContractSummary {
         this.returnDueDate = returnDueDate;
         this.commissionAmount = commissionAmount;
         this.loanAmount = loanAmount;
+        this.totalAssessedValue = totalAssessedValue;
+        this.itemCount = itemCount;
     }
 
     public int getContractId() { return contractId; }
@@ -32,4 +37,6 @@ public class ContractSummary {
     public LocalDate getReturnDueDate() { return returnDueDate; }
     public BigDecimal getCommissionAmount() { return commissionAmount; }
     public BigDecimal getLoanAmount() { return loanAmount; }
+    public BigDecimal getTotalAssessedValue() { return totalAssessedValue; }
+    public int getItemCount() { return itemCount; }
 }

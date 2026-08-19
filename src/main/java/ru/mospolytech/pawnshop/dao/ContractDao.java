@@ -257,7 +257,9 @@ public class ContractDao {
                             result.getDate("issue_date").toLocalDate(),
                             result.getDate("return_due_date").toLocalDate(),
                             result.getBigDecimal("commission_amount"),
-                            result.getBigDecimal("loan_amount")
+                            result.getBigDecimal("loan_amount"),
+                            result.getBigDecimal("total_assessed_value"),
+                            result.getInt("item_count")
                     ));
                 }
             }
@@ -267,7 +269,11 @@ public class ContractDao {
 
     private String summarySelect() {
         return "SELECT c.id_contract, c.id_client, cl.full_name AS client_name, c.issue_date, "
-                + "c.return_due_date, c.commission_amount, c.loan_amount "
+                + "c.return_due_date, c.commission_amount, c.loan_amount, "
+                + "COALESCE((SELECT SUM(ci.assessed_value) FROM contract_items ci "
+                + "WHERE ci.id_contract = c.id_contract), 0) AS total_assessed_value, "
+                + "(SELECT COUNT(*) FROM contract_items ci "
+                + "WHERE ci.id_contract = c.id_contract) AS item_count "
                 + "FROM contracts c JOIN clients cl ON cl.id_client = c.id_client";
     }
 

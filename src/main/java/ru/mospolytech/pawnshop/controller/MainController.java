@@ -8,6 +8,8 @@ import ru.mospolytech.pawnshop.util.ValidationUtils;
 import ru.mospolytech.pawnshop.view.*;
 
 import javax.swing.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -50,10 +52,17 @@ public class MainController {
         view.getLogoutButton().addActionListener(event -> logout());
         view.getProfilePanel().getSaveButton().addActionListener(event -> updateProfile());
         view.getContractsPanel().getRefreshButton().addActionListener(event -> refreshContracts());
-        view.getContractsPanel().getItemsButton().addActionListener(event -> openContractItems());
-        view.getContractsPanel().getTable().getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting() && isAdmin()) {
-                fillContractForm();
+        view.getContractsPanel().getUpdateButton().addActionListener(event -> openContractCard());
+        view.getContractsPanel().getTable().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                    int row = view.getContractsPanel().getTable().rowAtPoint(event.getPoint());
+                    if (row >= 0) {
+                        view.getContractsPanel().getTable().setRowSelectionInterval(row, row);
+                        openContractCard();
+                    }
+                }
             }
         });
     }
@@ -77,7 +86,6 @@ public class MainController {
 
         ContractsPanel contractsPanel = view.getContractsPanel();
         contractsPanel.getAddButton().addActionListener(event -> createContract());
-        contractsPanel.getUpdateButton().addActionListener(event -> updateContract());
         contractsPanel.getDeleteButton().addActionListener(event -> deleteContract());
 
         ItemsPanel itemsPanel = view.getItemsPanel();
@@ -237,7 +245,6 @@ public class MainController {
                         client.getPassportData(), client.getUserId()};
             }
             view.getClientsPanel().setRows(rows);
-            refillCombo(view.getContractsPanel().getClientCombo(), clients);
         });
     }
 
@@ -290,55 +297,65 @@ public class MainController {
                 ContractSummary contract = contracts.get(i);
                 rows[i] = new Object[]{contract.getContractId(), contract.getClientName(),
                         contract.getIssueDate(), contract.getReturnDueDate(),
-                        contract.getLoanAmount(), contract.getCommissionAmount()};
+                        contract.getLoanAmount(), contract.getCommissionAmount(),
+                        contract.getTotalAssessedValue(), contract.getItemCount()};
             }
             view.getContractsPanel().setRows(rows);
         });
     }
 
-    private void fillContractForm() {
-        int row = view.getContractsPanel().getSelectedModelRow();
-        if (row < 0 || row >= contracts.size()) return;
-        ContractSummary contract = contracts.get(row);
-        selectClient(view.getContractsPanel().getClientCombo(), contract.getClientId());
-        view.getContractsPanel().getIssueDateField().setText(contract.getIssueDate().toString());
-        view.getContractsPanel().getDueDateField().setText(contract.getReturnDueDate().toString());
-        view.getContractsPanel().getLoanField().setText(contract.getLoanAmount().toPlainString());
-        view.getContractsPanel().getCommissionField().setText(contract.getCommissionAmount().toPlainString());
-    }
-
     private void createContract() {
-        try {
-            Contract contract = readContractForm(0);
-            contractDao.create(contract);
-            refreshContracts();
-        } catch (IllegalArgumentException e) {
-            ViewUtils.showError(view, e.getMessage());
-        } catch (SQLException e) {
-            showSqlError(e);
+        if (clients.isEmpty()) {
+            ViewUtils.showError(view, "Сначала зарегистрируйте хотя бы одного клиента");
+            return;
         }
+        ContractEditDialog dialog = new ContractEditDialog(view, clients, null);
+        dialog.getSaveButton().addActionListener(event -> {
+            try {
+                Contract contract = readContractForm(dialog, 0);
+                Client client = dialog.getSelectedClient();
+                int contractId = contractDao.create(contract);
+                ContractSummary createdContract = new ContractSummary(
+                        contractId,
+                        client.getId(),
+                        client.getFullName(),
+                        contract.getIssueDate(),
+                        contract.getReturnDueDate(),
+                        contract.getCommissionAmount(),
+                        contract.getLoanAmount(),
+                        BigDecimal.ZERO,
+                        0
+                );
+                dialog.dispose();
+                refreshContracts();
+                openContractCard(createdContract, true);
+            } catch (IllegalArgumentException e) {
+                ViewUtils.showError(dialog, e.getMessage());
+            } catch (SQLException e) {
+                ViewUtils.showError(dialog, sqlMessage(e));
+            }
+        });
+        dialog.setVisible(true);
     }
 
-    private void updateContract() {
-        int row = requireSelectedRow(view.getContractsPanel(), "договор");
-        if (row < 0) return;
-        try {
-            Contract contract = readContractForm(contracts.get(row).getContractId());
-            contractDao.update(contract);
-            refreshContracts();
-        } catch (IllegalArgumentException e) {
-            ViewUtils.showError(view, e.getMessage());
-        } catch (SQLException e) {
-            showSqlError(e);
-        }
+    private Contract readContractForm(ContractEditDialog dialog, int id) {
+        return buildContract(id, dialog.getSelectedClient(),
+                dialog.getIssueDateField().getText(), dialog.getDueDateField().getText(),
+                dialog.getCommissionField().getText(), dialog.getLoanField().getText());
     }
 
-    private Contract readContractForm(int id) {
-        ContractsPanel panel = view.getContractsPanel();
-        Client client = (Client) panel.getClientCombo().getSelectedItem();
-        if (client == null) throw new IllegalArgumentException("Сначала зарегистрируйте хотя бы одного клиента");
-        LocalDate issueDate = ValidationUtils.parseDate(panel.getIssueDateField().getText(), "Дата выдачи");
-        LocalDate dueDate = ValidationUtils.parseDate(panel.getDueDateField().getText(), "Срок возврата");
+    private Contract readContractForm(ContractCardDialog dialog, int id) {
+        return buildContract(id, dialog.getSelectedClient(),
+                dialog.getIssueDateField().getText(), dialog.getDueDateField().getText(),
+                dialog.getCommissionField().getText(), dialog.getLoanField().getText());
+    }
+
+    private Contract buildContract(int id, Client client, String issueDateText,
+                                   String dueDateText, String commissionText,
+                                   String loanText) {
+        if (client == null) throw new IllegalArgumentException("Выберите клиента");
+        LocalDate issueDate = ValidationUtils.parseDate(issueDateText, "Дата выдачи");
+        LocalDate dueDate = ValidationUtils.parseDate(dueDateText, "Срок возврата");
         if (issueDate.isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Дата выдачи не может быть в будущем");
         }
@@ -346,8 +363,8 @@ public class MainController {
             throw new IllegalArgumentException("Срок возврата не может быть раньше даты выдачи");
         }
         return new Contract(id, issueDate, dueDate,
-                ValidationUtils.parsePositiveMoney(panel.getCommissionField().getText(), "Комиссия", true),
-                ValidationUtils.parsePositiveMoney(panel.getLoanField().getText(), "Сумма выдачи", false),
+                ValidationUtils.parsePositiveMoney(commissionText, "Комиссия", true),
+                ValidationUtils.parsePositiveMoney(loanText, "Сумма выдачи", false),
                 client.getId());
     }
 
@@ -362,41 +379,70 @@ public class MainController {
         });
     }
 
-    private void openContractItems() {
+    private void openContractCard() {
         int row = requireSelectedRow(view.getContractsPanel(), "договор");
         if (row < 0) return;
-        int contractId = contracts.get(row).getContractId();
+        openContractCard(contracts.get(row), false);
+    }
+
+    private void openContractCard(ContractSummary contract, boolean selectItemsTab) {
+        int contractId = contract.getContractId();
         try {
             boolean editable = isAdmin() && contractDao.isEditable(contractId);
-            ContractItemsDialog dialog = new ContractItemsDialog(view, contractId, editable);
+            List<Client> cardClients = isAdmin()
+                    ? clients
+                    : clientDao.findByUserId(currentUser.getId())
+                    .map(List::of).orElseGet(List::of);
+            ContractCardDialog dialog = new ContractCardDialog(
+                    view, cardClients, contract, editable);
+            if (selectItemsTab) {
+                dialog.selectItemsTab();
+            }
             List<ContractItem> contractItems = new ArrayList<>();
+
+            dialog.getSaveDataButton().addActionListener(event -> {
+                try {
+                    contractDao.update(readContractForm(dialog, contractId));
+                    refreshContracts();
+                    ViewUtils.showInfo(dialog, "Данные договора сохранены");
+                } catch (IllegalArgumentException e) {
+                    ViewUtils.showError(dialog, e.getMessage());
+                } catch (SQLException e) {
+                    ViewUtils.showError(dialog, sqlMessage(e));
+                }
+            });
 
             Runnable refresh = () -> runDatabaseAction(() -> {
                 contractItems.clear();
                 contractItems.addAll(contractDao.findItems(contractId));
-                dialog.getTableModel().setRowCount(0);
+                dialog.getItemsTableModel().setRowCount(0);
+                BigDecimal totalAssessed = BigDecimal.ZERO;
                 for (ContractItem item : contractItems) {
-                    dialog.getTableModel().addRow(new Object[]{
+                    dialog.getItemsTableModel().addRow(new Object[]{
                             item.getItemId(), item.getItemName(), item.getAssessedValue()
                     });
+                    totalAssessed = totalAssessed.add(item.getAssessedValue());
                 }
+                dialog.setItemsSummary(contractItems.size(), totalAssessed);
+                dialog.setItemActionsEnabled(false);
                 if (editable) {
                     refillCombo(dialog.getItemCombo(), contractDao.findItemsAvailableForPledge());
                 }
             });
             refresh.run();
 
-            dialog.getTable().getSelectionModel().addListSelectionListener(event -> {
+            dialog.getItemsTable().getSelectionModel().addListSelectionListener(event -> {
                 if (event.getValueIsAdjusting()) return;
-                int selected = dialog.getTable().getSelectedRow();
-                if (selected < 0) return;
-                int modelRow = dialog.getTable().convertRowIndexToModel(selected);
+                int selected = dialog.getItemsTable().getSelectedRow();
+                dialog.setItemActionsEnabled(selected >= 0 && editable);
+                if (selected < 0 || !editable) return;
+                int modelRow = dialog.getItemsTable().convertRowIndexToModel(selected);
                 dialog.getAssessedValueField().setText(
                         contractItems.get(modelRow).getAssessedValue().toPlainString()
                 );
             });
 
-            dialog.getAddButton().addActionListener(event -> {
+            dialog.getAddItemButton().addActionListener(event -> {
                 try {
                     Item item = (Item) dialog.getItemCombo().getSelectedItem();
                     if (item == null) {
@@ -414,13 +460,13 @@ public class MainController {
                 }
             });
 
-            dialog.getUpdateButton().addActionListener(event -> {
-                int selected = dialog.getTable().getSelectedRow();
+            dialog.getUpdateItemButton().addActionListener(event -> {
+                int selected = dialog.getItemsTable().getSelectedRow();
                 if (selected < 0) {
                     ViewUtils.showError(dialog, "Выберите товар в таблице");
                     return;
                 }
-                int modelRow = dialog.getTable().convertRowIndexToModel(selected);
+                int modelRow = dialog.getItemsTable().convertRowIndexToModel(selected);
                 ContractItem item = contractItems.get(modelRow);
                 try {
                     BigDecimal assessed = ValidationUtils.parsePositiveMoney(
@@ -434,27 +480,35 @@ public class MainController {
                 }
             });
 
-            dialog.getRemoveButton().addActionListener(event -> {
-                int selected = dialog.getTable().getSelectedRow();
+            dialog.getRemoveItemButton().addActionListener(event -> {
+                int selected = dialog.getItemsTable().getSelectedRow();
                 if (selected < 0) {
                     ViewUtils.showError(dialog, "Выберите товар в таблице");
                     return;
                 }
-                int modelRow = dialog.getTable().convertRowIndexToModel(selected);
+                int modelRow = dialog.getItemsTable().convertRowIndexToModel(selected);
                 ContractItem item = contractItems.get(modelRow);
+                if (!ViewUtils.confirm(dialog,
+                        "Убрать товар «" + item.getItemName() + "» из договора?")) {
+                    return;
+                }
                 try {
                     contractDao.removeItem(contractId, item.getItemId());
+                    dialog.getAssessedValueField().setText("");
                     refresh.run();
                 } catch (SQLException e) {
                     ViewUtils.showError(dialog, sqlMessage(e));
                 }
             });
 
-            if (isAdmin() && !editable) {
-                ViewUtils.showInfo(view,
-                        "Договор уже стал историческим. Его состав доступен только для просмотра.");
-            }
             dialog.setVisible(true);
+            if (editable && contractDao.findItems(contractId).isEmpty()) {
+                contractDao.delete(contractId);
+                ViewUtils.showInfo(view,
+                        "Пустой договор № " + contractId + " удалён. "
+                                + "В договоре должен быть хотя бы один товар");
+            }
+            refreshContracts();
             if (isAdmin()) refreshItems();
         } catch (SQLException e) {
             showSqlError(e);
@@ -766,15 +820,6 @@ public class MainController {
     private <T> void refillCombo(JComboBox<T> combo, List<T> values) {
         combo.removeAllItems();
         for (T value : values) combo.addItem(value);
-    }
-
-    private void selectClient(JComboBox<Client> combo, int clientId) {
-        for (int i = 0; i < combo.getItemCount(); i++) {
-            if (combo.getItemAt(i).getId() == clientId) {
-                combo.setSelectedIndex(i);
-                return;
-            }
-        }
     }
 
     private void selectItem(JComboBox<Item> combo, int itemId) {
